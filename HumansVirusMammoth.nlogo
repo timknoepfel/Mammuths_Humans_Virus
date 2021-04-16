@@ -1,8 +1,10 @@
-;; combination of the mamoths extinction model and the virus spread model to see which effect a human virus has on the extinction of the mammoths
+;; combination of the mammoths extinction model and the virus spread model to see which effect a human virus has on the extinction of the mammoths
+;; to run this model the "Americas.png" file from the netLogo Sample models (\app\models\Sample Models) is required.
 
-globals [
   mammoths-killed-by-humans         ; counter to keep track of the number of mammoths killed by humans
   mammoths-killed-by-climate-change ; counter to keep track of the number of mammoths killed by climate change
+  humans-killed-by-disease
+  humans-killed-by-mammoths
   %sick
   %immune
 ]
@@ -47,24 +49,13 @@ to setup
     set sick-time 0
     set immune? false
     set sick? false
-    ask n-of infections-start humans [get-sick]
-  ]
-
+    ]
+ask n-of infections-start humans [get-sick]
   set mammoths-killed-by-climate-change 0
   set mammoths-killed-by-humans 0
+  set humans-killed-by-disease 0
+  set humans-killed-by-mammoths 0
   reset-ticks
-end
-
-to get-sick
-  set sick? true
-  set sick-time 0
-  end
-
-to get-healthy
-  set sick? false
-  set sick-time 0
-  set remaining-immunity immunity-duration
-  set immune? true
 end
 
 
@@ -101,21 +92,24 @@ to go
     ]
     if any? mammoths-here [
       let r random 100
-      if r < 3 [ die ] ; mammoths have a 3% chance of killing the human
+      if r < 3  [
+        set humans-killed-by-mammoths humans-killed-by-mammoths + 1
+        die ] ; mammoths have a 3% chance of killing the human
       if r < 3 + odds-of-killing [
         ask one-of mammoths-here [ die ] ; successfully hunt a mammoth!
         set mammoths-killed-by-humans mammoths-killed-by-humans + 1
       ]
     ]
-    reproduce (18 * 12) human-birth-rate ; humans reproduce after age 12
+    reproduce (12 * 12) human-birth-rate ; humans reproduce after age 12
     if sick? [set sick-time sick-time + 1 ]
     if sick? [infect]
-    if sick? [recover-or-die]
+    if sick? [sick-die]
     if immune? [set remaining-immunity remaining-immunity - 1 ]
  ]
   die-naturally ; mammoths and humans die if they're old or crowded
   update-global-variables
   ask turtles [ set age age + 1 ]
+  mutate
   tick
 end
 
@@ -131,17 +125,40 @@ to move [ dist ] ; human or mammoth procedure
   forward dist
 end
 
-to recover-or-die ;; turtle procedure
- ;if sick-time < duration [if random-float 1 * ( age / 2.5 ) > chance-recover [ die ] ]
-  ifelse sick-time < duration [ if random 100 < chance-recover - age [ die ] ][ get-healthy ]
-  ;if sick-time > duration                        ;; If the turtle has survived past the virus' duration, then
-   ; [ if random-float 100 < chance-recover   ;; either recover or die
-   ;   ]
+to get-sick
+  set sick? true
+  set sick-time 0
+  end
+
+to get-healthy
+  set sick? false
+  set sick-time 0
+  set remaining-immunity immunity-duration
+  set immune? true
 end
+
+to mutate
+  if ticks mod mutation-freq = 0 [
+    ask n-of new-sick humans [get-sick]
+  ]
+end
+
+to sick-die ;; human procedure
+  if sick-time < duration [ if random 100 < chance-to-die + ( age / 4 )
+    [ set humans-killed-by-disease humans-killed-by-disease + 1
+    die ] ]
+end
+
+;;to recover-or-die ;; turtle procedure
+;;  ifelse sick-time < duration [ if random 100 < chance-recover - age / 2
+;;  [ set humans-killed-by-disease humans-killed-by-disease + 1
+;;    die ] ]
+;;  [ get-healthy ]
+;; end
 
 to infect
   ask other turtles-here in-radius 20 with [ not sick? and not immune?]
-  [ if random 100 < infectiousness
+  [ if random 100 <= infectiousness
       [ get-sick ] ]
 end
 
@@ -187,11 +204,7 @@ to die-naturally
   ]
 end
 
-to update-display
-  ask humans[
-      set color ifelse-value sick? [ red ] [ ifelse-value immune? [ grey ] [ green ] ]
-]
-end
+
 
 to-report density ; turtle reporter
   let nearby-turtles (turtle-set turtles-on neighbors turtles-here)
